@@ -1,0 +1,19 @@
+name: Check Pokémon Card lottery info
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check bot
+        env:
+          BOT_URL: https://pokeca-lottery-line-bot.onrender.com/check
+          CHECK_TOKEN: ${{ secrets.CHECK_TOKEN }}
+        run: |
+          curl --fail --show-error --silent \
+            -H "Authorization: Bearer ${CHECK_TOKEN}" \
+            "${BOT_URL}"
