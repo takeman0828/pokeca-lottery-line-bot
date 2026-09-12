@@ -9,6 +9,17 @@ jobs:
   check:
     runs-on: ubuntu-latest
     steps:
+      - name: Check token is set
+        env:
+          CHECK_TOKEN: ${{ secrets.CHECK_TOKEN }}
+        run: |
+          if [ -z "${CHECK_TOKEN}" ]; then
+            echo "CHECK_TOKEN is EMPTY"
+            exit 1
+          else
+            echo "CHECK_TOKEN is set"
+          fi
+
       - name: Check bot
         env:
           BOT_URL: https://pokeca-lottery-line-bot.onrender.com/check
