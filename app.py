@@ -54,6 +54,14 @@ def verify_signature(body: bytes, signature: str) -> bool:
 def health():
     return {"ok": True}
 
+@app.get("/check")
+def check():
+    expected = os.getenv("CHECK_TOKEN", "")
+    provided = request.headers.get("Authorization", "")
+    if not expected or provided != f"Bearer {expected}":
+        abort(401)
+    return {"new": notify_new_items()}
+
 @app.post("/callback")
 def callback():
     body = request.get_data()
