@@ -94,17 +94,42 @@ def google_news_url(query):
         f"q={quote(query)}&hl=ja&gl=JP&ceid=JP:ja"
     )
 
-# 「ポケカ 抽選」を広く拾う検索語。
-# 追加したいキーワードはここへ。
+# ポケカの抽選・応募情報をできるだけ広く拾う検索語。
+# 店舗名だけでなく、抽選/応募/予約/当選/入荷などの表現も監視する。
 QUERIES = [
     "ポケカ 抽選",
     "ポケモンカード 抽選",
+    "ポケカ 応募",
+    "ポケモンカード 応募",
+    "ポケカ 予約 抽選",
     "ポケモンカード 予約 抽選",
     "ポケカ BOX 抽選",
-    "ポケカ 当選 抽選",
-    "ポケカ 抽選 応募",
-    "ポケモンカード 抽選 応募",
+    "ポケモンカード BOX 抽選",
+    "ポケカ 当選",
+    "ポケモンカード 当選",
+    "ポケカ 入荷 抽選",
+    "ポケモンカード 入荷 抽選",
+    "ポケカ 抽選受付",
+    "ポケモンカード 抽選受付",
+    "ポケカ 抽選開始",
+    "ポケモンカード 抽選開始",
+    "ポケモンセンター ポケカ 抽選",
+    "Amazon ポケカ 抽選",
+    "楽天 ポケカ 抽選",
+    "ヨドバシ ポケカ 抽選",
+    "ビックカメラ ポケカ 抽選",
+    "Joshin ポケカ 抽選",
+    "ヤマダ電機 ポケカ 抽選",
+    "TSUTAYA ポケカ 抽選",
+    "GEO ポケカ 抽選",
+    "セブンネット ポケカ 抽選",
+    "イオン ポケカ 抽選",
+    "トイザらス ポケカ 抽選",
+    "カードショップ ポケカ 抽選",
 ]
+
+CARD_WORDS = ("ポケカ", "ポケモンカード", "ポケモンカードゲーム")
+LOTTERY_WORDS = ("抽選", "応募", "予約", "当選", "受付", "入荷")
 
 def fetch_items():
     seen = []
@@ -116,17 +141,23 @@ def fetch_items():
             published = e.get("published", "")
             if not title or not url:
                 continue
-            # 抽選ワードを含むものだけ通知対象にする
+
+            # ポケカ関連かつ、抽選・応募などの販売情報だけを通知対象にする。
             hay = title.lower()
-            if "抽選" not in hay and "応募" not in hay:
+            if not any(word.lower() in hay for word in CARD_WORDS):
                 continue
+            if not any(word.lower() in hay for word in LOTTERY_WORDS):
+                continue
+
             key = hashlib.sha256(url.encode()).hexdigest()
             seen.append((key, title, url, published))
+
     # URL重複を除去
     out, keys = [], set()
     for row in seen:
         if row[0] not in keys:
-            keys.add(row[0]); out.append(row)
+            keys.add(row[0])
+            out.append(row)
     return out
 
 def notify_new_items():
@@ -159,5 +190,4 @@ def notify_new_items():
     return count
 
 if __name__ == "__main__":
-    # 手動/cron実行用
     print("new:", notify_new_items())
