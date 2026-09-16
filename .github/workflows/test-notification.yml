@@ -7,13 +7,13 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - name: Send LINE test notification
+      - name: Send lottery-format LINE test
         env:
-          BOT_URL: https://pokeca-lottery-line-bot.onrender.com/test
+          BOT_URL: https://pokeca-lottery-line-bot.onrender.com/test-lottery
           CHECK_TOKEN: ${{ secrets.CHECK_TOKEN }}
         run: |
-          echo "Testing LINE notification..."
-          curl --fail --show-error \
+          echo "Testing LINE lottery notification..."
+          curl --fail --show-error --silent \
             -H "Authorization: Bearer ${CHECK_TOKEN}" \
             "${BOT_URL}"
           echo
