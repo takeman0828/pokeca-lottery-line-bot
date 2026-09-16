@@ -62,6 +62,27 @@ def check():
         abort(401)
     return {"new": notify_new_items()}
 
+@app.get("/test")
+def test_notification():
+    expected = os.getenv("CHECK_TOKEN", "")
+    provided = request.headers.get("Authorization", "")
+    if not expected or provided != f"Bearer {expected}":
+        abort(401)
+
+    con = db()
+    users = [r[0] for r in con.execute("SELECT user_id FROM users").fetchall()]
+    con.close()
+
+    sent = 0
+    for user in users:
+        try:
+            line_push(user, "🎴 ポケカ抽選通知Bot\n\nこれはテスト通知です！\nLINE通知が正常に届くことを確認しました。👍")
+            sent += 1
+        except Exception as e:
+            print("LINE test push error:", e)
+
+    return {"sent": sent, "registered_users": len(users)}
+
 @app.post("/callback")
 def callback():
     body = request.get_data()
