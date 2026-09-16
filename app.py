@@ -42,9 +42,7 @@ def line_push(user_id, text):
 
 def verify_signature(body: bytes, signature: str) -> bool:
     digest = hmac.new(
-        LINE_SECRET.encode("utf-8"),
-        body,
-        hashlib.sha256
+        LINE_SECRET.encode("utf-8"), body, hashlib.sha256
     ).digest()
     import base64
     expected = base64.b64encode(digest).decode()
@@ -68,11 +66,9 @@ def test_notification():
     provided = request.headers.get("Authorization", "")
     if not expected or provided != f"Bearer {expected}":
         abort(401)
-
     con = db()
     users = [r[0] for r in con.execute("SELECT user_id FROM users").fetchall()]
     con.close()
-
     sent = 0
     for user in users:
         try:
@@ -80,7 +76,6 @@ def test_notification():
             sent += 1
         except Exception as e:
             print("LINE test push error:", e)
-
     return {"sent": sent, "registered_users": len(users)}
 
 @app.get("/test-lottery")
@@ -89,11 +84,9 @@ def test_lottery_notification():
     provided = request.headers.get("Authorization", "")
     if not expected or provided != f"Bearer {expected}":
         abort(401)
-
     con = db()
     users = [r[0] for r in con.execute("SELECT user_id FROM users").fetchall()]
     con.close()
-
     sent = 0
     message = (
         "🎴 ポケカ抽選情報【テスト】\n\n"
@@ -109,7 +102,6 @@ def test_lottery_notification():
             sent += 1
         except Exception as e:
             print("LINE lottery test push error:", e)
-
     return {"sent": sent, "registered_users": len(users)}
 
 @app.post("/callback")
@@ -117,33 +109,27 @@ def callback():
     body = request.get_data()
     if not verify_signature(body, request.headers.get("X-Line-Signature")):
         abort(400)
-
     data = request.get_json(silent=True) or {}
     con = db()
-
     for event in data.get("events", []):
         user = event.get("source", {}).get("userId")
         if not user:
             continue
-
         con.execute(
             "INSERT OR IGNORE INTO users(user_id, created_at) VALUES(?,?)",
             (user, datetime.now(timezone.utc).isoformat())
         )
         con.commit()
-
         if event.get("type") == "follow":
             try:
                 line_push(user, "🎴 ポケカ抽選通知Botです！\n友だち追加ありがとう。\n新しい抽選情報を見つけたら、このLINEに通知します。")
             except Exception as e:
                 print("LINE push error:", e)
-
         elif event.get("type") == "message":
             try:
                 line_push(user, "🎴 テストを受信しました！\nLINE通知Botは正常に接続されています。\nこのまま友だち登録しておけば、抽選情報を通知します👍")
             except Exception as e:
                 print("LINE message reply error:", e)
-
     con.close()
     return "OK"
 
@@ -170,7 +156,8 @@ ACTION_WORDS = ("抽選", "応募", "予約", "受付")
 EXCLUDE_WORDS = (
     "調査", "アンケート", "ランキング", "実態", "意識調査", "市場調査",
     "レビュー", "開封", "買取", "価格", "高騰", "相場", "当選報告",
-    "当選者", "当選結果", "当選発表", "まとめ", "攻略", "コラム"
+    "当選者", "当選結果", "当選発表", "まとめ", "攻略", "コラム",
+    "ニュース", "最新ニュース", "ニュース記事", "報道", "メディア"
 )
 
 
@@ -189,7 +176,6 @@ def fetch_items():
     seen = []
     now = datetime.now(timezone.utc)
     cutoff = now - timedelta(days=3)
-
     for q in QUERIES:
         feed = feedparser.parse(google_news_url(q))
         for e in feed.entries:
@@ -198,7 +184,6 @@ def fetch_items():
             published = e.get("published", "")
             if not title or not url:
                 continue
-
             hay = title.lower()
             if not any(word.lower() in hay for word in CARD_WORDS):
                 continue
@@ -206,15 +191,11 @@ def fetch_items():
                 continue
             if any(word.lower() in hay for word in EXCLUDE_WORDS):
                 continue
-
             published_dt = parse_published(e)
-            # 古い記事を新着として通知しない。公開日時が取れない記事は安全側で除外。
             if published_dt is None or published_dt < cutoff or published_dt > now + timedelta(hours=1):
                 continue
-
             key = hashlib.sha256(url.encode()).hexdigest()
             seen.append((key, title, url, published))
-
     out, keys = [], set()
     for row in seen:
         if row[0] not in keys:
@@ -227,20 +208,15 @@ def notify_new_items():
     con = db()
     users = [r[0] for r in con.execute("SELECT user_id FROM users").fetchall()]
     count = 0
-
     for key, title, url, published in fetch_items():
-        exists = con.execute(
-            "SELECT 1 FROM items WHERE item_key=?", (key,)
-        ).fetchone()
+        exists = con.execute("SELECT 1 FROM items WHERE item_key=?", (key,)).fetchone()
         if exists:
             continue
-
         con.execute(
             "INSERT INTO items(item_key,title,url,published,created_at) VALUES(?,?,?,?,?)",
             (key, title, url, published, datetime.now(timezone.utc).isoformat())
         )
         con.commit()
-
         msg = f"🎴 ポケカ抽選情報\n\n{title}\n\n🔗 {url}"
         for user in users:
             try:
@@ -248,7 +224,6 @@ def notify_new_items():
             except Exception as e:
                 print("LINE push error:", e)
         count += 1
-
     con.close()
     return count
 
