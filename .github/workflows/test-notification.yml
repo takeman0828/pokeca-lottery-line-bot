@@ -13,7 +13,22 @@ jobs:
           CHECK_TOKEN: ${{ secrets.CHECK_TOKEN }}
         run: |
           echo "Testing LINE lottery notification..."
-          curl --fail --show-error --silent \
+          RESPONSE=$(curl --fail --show-error --silent \
             -H "Authorization: Bearer ${CHECK_TOKEN}" \
-            "${BOT_URL}"
-          echo
+            "${BOT_URL}")
+          echo "Response: ${RESPONSE}"
+          export RESPONSE
+          python - <<'PY'
+          import json, os, sys
+          data = json.loads(os.environ["RESPONSE"])
+          print(f"registered_users={data.get('registered_users')}")
+          print(f"sent={data.get('sent')}")
+          print(f"errors={data.get('errors')}")
+          if data.get("registered_users", 0) == 0:
+              print("ERROR: No LINE users are registered in Render DB.")
+              sys.exit(2)
+          if data.get("sent", 0) == 0:
+              print("ERROR: LINE push failed for all registered users.")
+              sys.exit(3)
+          print("LINE notification push succeeded.")
+          PY
