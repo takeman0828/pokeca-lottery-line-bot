@@ -96,16 +96,27 @@ def callback():
         user = event.get("source", {}).get("userId")
         if not user:
             continue
+
+        # followだけでなく、メッセージ受信時にもユーザーを登録する。
+        # これでWebhookが正常に届いているかLINE上から確認できる。
+        con.execute(
+            "INSERT OR IGNORE INTO users(user_id, created_at) VALUES(?,?)",
+            (user, datetime.now(timezone.utc).isoformat())
+        )
+        con.commit()
+
         if event.get("type") == "follow":
-            con.execute(
-                "INSERT OR IGNORE INTO users(user_id, created_at) VALUES(?,?)",
-                (user, datetime.now(timezone.utc).isoformat())
-            )
-            con.commit()
             try:
                 line_push(user, "🎴 ポケカ抽選通知Botです！\n友だち追加ありがとう。\n新しい抽選情報を見つけたら、このLINEに通知します。")
             except Exception as e:
                 print("LINE push error:", e)
+
+        elif event.get("type") == "message":
+            try:
+                line_push(user, "🎴 テストを受信しました！\nLINE通知Botは正常に接続されています。\nこのまま友だち登録しておけば、抽選情報を通知します👍")
+            except Exception as e:
+                print("LINE message reply error:", e)
+
     con.close()
     return "OK"
 
@@ -115,37 +126,16 @@ def google_news_url(query):
         f"q={quote(query)}&hl=ja&gl=JP&ceid=JP:ja"
     )
 
-# ポケカの抽選・応募情報をできるだけ広く拾う検索語。
-# 店舗名だけでなく、抽選/応募/予約/当選/入荷などの表現も監視する。
 QUERIES = [
-    "ポケカ 抽選",
-    "ポケモンカード 抽選",
-    "ポケカ 応募",
-    "ポケモンカード 応募",
-    "ポケカ 予約 抽選",
-    "ポケモンカード 予約 抽選",
-    "ポケカ BOX 抽選",
-    "ポケモンカード BOX 抽選",
-    "ポケカ 当選",
-    "ポケモンカード 当選",
-    "ポケカ 入荷 抽選",
-    "ポケモンカード 入荷 抽選",
-    "ポケカ 抽選受付",
-    "ポケモンカード 抽選受付",
-    "ポケカ 抽選開始",
-    "ポケモンカード 抽選開始",
-    "ポケモンセンター ポケカ 抽選",
-    "Amazon ポケカ 抽選",
-    "楽天 ポケカ 抽選",
-    "ヨドバシ ポケカ 抽選",
-    "ビックカメラ ポケカ 抽選",
-    "Joshin ポケカ 抽選",
-    "ヤマダ電機 ポケカ 抽選",
-    "TSUTAYA ポケカ 抽選",
-    "GEO ポケカ 抽選",
-    "セブンネット ポケカ 抽選",
-    "イオン ポケカ 抽選",
-    "トイザらス ポケカ 抽選",
+    "ポケカ 抽選", "ポケモンカード 抽選", "ポケカ 応募", "ポケモンカード 応募",
+    "ポケカ 予約 抽選", "ポケモンカード 予約 抽選", "ポケカ BOX 抽選",
+    "ポケモンカード BOX 抽選", "ポケカ 当選", "ポケモンカード 当選",
+    "ポケカ 入荷 抽選", "ポケモンカード 入荷 抽選", "ポケカ 抽選受付",
+    "ポケモンカード 抽選受付", "ポケカ 抽選開始", "ポケモンカード 抽選開始",
+    "ポケモンセンター ポケカ 抽選", "Amazon ポケカ 抽選", "楽天 ポケカ 抽選",
+    "ヨドバシ ポケカ 抽選", "ビックカメラ ポケカ 抽選", "Joshin ポケカ 抽選",
+    "ヤマダ電機 ポケカ 抽選", "TSUTAYA ポケカ 抽選", "GEO ポケカ 抽選",
+    "セブンネット ポケカ 抽選", "イオン ポケカ 抽選", "トイザらス ポケカ 抽選",
     "カードショップ ポケカ 抽選",
 ]
 
@@ -162,18 +152,14 @@ def fetch_items():
             published = e.get("published", "")
             if not title or not url:
                 continue
-
-            # ポケカ関連かつ、抽選・応募などの販売情報だけを通知対象にする。
             hay = title.lower()
             if not any(word.lower() in hay for word in CARD_WORDS):
                 continue
             if not any(word.lower() in hay for word in LOTTERY_WORDS):
                 continue
-
             key = hashlib.sha256(url.encode()).hexdigest()
             seen.append((key, title, url, published))
 
-    # URL重複を除去
     out, keys = [], set()
     for row in seen:
         if row[0] not in keys:
