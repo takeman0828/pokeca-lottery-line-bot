@@ -1,0 +1,19 @@
+name: Lottery format notification test
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send lottery format LINE notification
+        env:
+          BOT_URL: https://pokeca-lottery-line-bot.onrender.com/test-lottery
+          CHECK_TOKEN: ${{ secrets.CHECK_TOKEN }}
+        run: |
+          echo "Testing lottery-format LINE notification..."
+          curl --fail --show-error --silent \
+            -H "Authorization: Bearer ${CHECK_TOKEN}" \
+            "${BOT_URL}"
+          echo
