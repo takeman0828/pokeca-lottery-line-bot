@@ -12,6 +12,8 @@ jobs:
           BOT_URL: https://pokeca-lottery-line-bot.onrender.com/test
           CHECK_TOKEN: ${{ secrets.CHECK_TOKEN }}
         run: |
-          curl --fail --show-error --silent \
+          echo "Testing LINE notification..."
+          curl --fail --show-error \
             -H "Authorization: Bearer ${CHECK_TOKEN}" \
             "${BOT_URL}"
+          echo
