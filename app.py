@@ -83,6 +83,35 @@ def test_notification():
 
     return {"sent": sent, "registered_users": len(users)}
 
+@app.get("/test-lottery")
+def test_lottery_notification():
+    expected = os.getenv("CHECK_TOKEN", "")
+    provided = request.headers.get("Authorization", "")
+    if not expected or provided != f"Bearer {expected}":
+        abort(401)
+
+    con = db()
+    users = [r[0] for r in con.execute("SELECT user_id FROM users").fetchall()]
+    con.close()
+
+    sent = 0
+    message = (
+        "🎴 ポケカ抽選情報【テスト】\n\n"
+        "ポケモンカードゲーム 新商品 抽選販売のお知らせ\n\n"
+        "🗓 応募期間：テスト期間\n"
+        "🏪 販売店：テスト店舗\n\n"
+        "🔗 https://example.com/\n\n"
+        "※これは通知動作確認用のテストです。"
+    )
+    for user in users:
+        try:
+            line_push(user, message)
+            sent += 1
+        except Exception as e:
+            print("LINE lottery test push error:", e)
+
+    return {"sent": sent, "registered_users": len(users)}
+
 @app.post("/callback")
 def callback():
     body = request.get_data()
