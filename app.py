@@ -1,5 +1,5 @@
 import os, sqlite3, hashlib, hmac
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from urllib.parse import quote
 import requests
 import feedparser
@@ -126,8 +126,6 @@ def callback():
         if not user:
             continue
 
-        # followだけでなく、メッセージ受信時にもユーザーを登録する。
-        # これでWebhookが正常に届いているかLINE上から確認できる。
         con.execute(
             "INSERT OR IGNORE INTO users(user_id, created_at) VALUES(?,?)",
             (user, datetime.now(timezone.utc).isoformat())
@@ -158,9 +156,8 @@ def google_news_url(query):
 QUERIES = [
     "ポケカ 抽選", "ポケモンカード 抽選", "ポケカ 応募", "ポケモンカード 応募",
     "ポケカ 予約 抽選", "ポケモンカード 予約 抽選", "ポケカ BOX 抽選",
-    "ポケモンカード BOX 抽選", "ポケカ 当選", "ポケモンカード 当選",
-    "ポケカ 入荷 抽選", "ポケモンカード 入荷 抽選", "ポケカ 抽選受付",
-    "ポケモンカード 抽選受付", "ポケカ 抽選開始", "ポケモンカード 抽選開始",
+    "ポケモンカード BOX 抽選", "ポケカ 抽選受付", "ポケモンカード 抽選受付",
+    "ポケカ 抽選開始", "ポケモンカード 抽選開始",
     "ポケモンセンター ポケカ 抽選", "Amazon ポケカ 抽選", "楽天 ポケカ 抽選",
     "ヨドバシ ポケカ 抽選", "ビックカメラ ポケカ 抽選", "Joshin ポケカ 抽選",
     "ヤマダ電機 ポケカ 抽選", "TSUTAYA ポケカ 抽選", "GEO ポケカ 抽選",
@@ -169,10 +166,30 @@ QUERIES = [
 ]
 
 CARD_WORDS = ("ポケカ", "ポケモンカード", "ポケモンカードゲーム")
-LOTTERY_WORDS = ("抽選", "応募", "予約", "当選", "受付", "入荷")
+ACTION_WORDS = ("抽選", "応募", "予約", "受付")
+EXCLUDE_WORDS = (
+    "調査", "アンケート", "ランキング", "実態", "意識調査", "市場調査",
+    "レビュー", "開封", "買取", "価格", "高騰", "相場", "当選報告",
+    "当選者", "当選結果", "当選発表", "まとめ", "攻略", "コラム"
+)
+
+
+def parse_published(entry):
+    value = entry.get("published_parsed") or entry.get("updated_parsed")
+    if not value:
+        return None
+    try:
+        from calendar import timegm
+        return datetime.fromtimestamp(timegm(value), tz=timezone.utc)
+    except Exception:
+        return None
+
 
 def fetch_items():
     seen = []
+    now = datetime.now(timezone.utc)
+    cutoff = now - timedelta(days=3)
+
     for q in QUERIES:
         feed = feedparser.parse(google_news_url(q))
         for e in feed.entries:
@@ -181,11 +198,20 @@ def fetch_items():
             published = e.get("published", "")
             if not title or not url:
                 continue
+
             hay = title.lower()
             if not any(word.lower() in hay for word in CARD_WORDS):
                 continue
-            if not any(word.lower() in hay for word in LOTTERY_WORDS):
+            if not any(word.lower() in hay for word in ACTION_WORDS):
                 continue
+            if any(word.lower() in hay for word in EXCLUDE_WORDS):
+                continue
+
+            published_dt = parse_published(e)
+            # 古い記事を新着として通知しない。公開日時が取れない記事は安全側で除外。
+            if published_dt is None or published_dt < cutoff or published_dt > now + timedelta(hours=1):
+                continue
+
             key = hashlib.sha256(url.encode()).hexdigest()
             seen.append((key, title, url, published))
 
@@ -195,6 +221,7 @@ def fetch_items():
             keys.add(row[0])
             out.append(row)
     return out
+
 
 def notify_new_items():
     con = db()
