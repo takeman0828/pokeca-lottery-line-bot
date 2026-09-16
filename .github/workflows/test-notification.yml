@@ -1,0 +1,17 @@
+name: LINE test notification
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send LINE test notification
+        env:
+          BOT_URL: https://pokeca-lottery-line-bot.onrender.com/test
+          CHECK_TOKEN: ${{ secrets.CHECK_TOKEN }}
+        run: |
+          curl --fail --show-error --silent \
+            -H "Authorization: Bearer ${CHECK_TOKEN}" \
+            "${BOT_URL}"
