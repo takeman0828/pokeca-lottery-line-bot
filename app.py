@@ -149,6 +149,10 @@ QUERIES = [
     "ヤマダ電機 ポケカ 抽選", "TSUTAYA ポケカ 抽選", "GEO ポケカ 抽選",
     "セブンネット ポケカ 抽選", "イオン ポケカ 抽選", "トイザらス ポケカ 抽選",
     "カードショップ ポケカ 抽選",
+    "site:livepocket.jp/e ポケカ 抽選",
+    "site:livepocket.jp/e ポケモンカード 抽選",
+    "site:livepocket.jp/e ポケカ 応募",
+    "site:livepocket.jp/e ポケモンカード 予約 抽選",
 ]
 
 CARD_WORDS = ("ポケカ", "ポケモンカード", "ポケモンカードゲーム")
@@ -156,10 +160,10 @@ ACTION_WORDS = ("抽選", "応募", "予約", "受付")
 EXCLUDE_WORDS = (
     "調査", "アンケート", "ランキング", "実態", "意識調査", "市場調査",
     "レビュー", "開封", "買取", "価格", "高騰", "相場", "当選報告",
-    "当選者", "当選結果", "当選発表", "まとめ", "攻略", "コラム",
-    "ニュース", "最新ニュース", "ニュース記事", "報道", "メディア"
+    "当選者", "当選結果", "当選発表", "結果発表", "集計", "当選率",
+    "まとめ", "攻略", "コラム", "ニュース", "最新ニュース",
+    "ニュース記事", "報道", "メディア"
 )
-
 
 def parse_published(entry):
     value = entry.get("published_parsed") or entry.get("updated_parsed")
@@ -170,7 +174,6 @@ def parse_published(entry):
         return datetime.fromtimestamp(timegm(value), tz=timezone.utc)
     except Exception:
         return None
-
 
 def fetch_items():
     seen = []
@@ -191,18 +194,26 @@ def fetch_items():
                 continue
             if any(word.lower() in hay for word in EXCLUDE_WORDS):
                 continue
+
+            # LivePocket専用検索は、実際のLivePocketページだけを通す。
+            # 通常検索から拾った記事についても、ニュース記事などは既存フィルターで除外する。
+            is_livepocket = "livepocket.jp/e/" in url.lower()
+            is_livepocket_query = q.startswith("site:livepocket.jp/e")
+            if is_livepocket_query and not is_livepocket:
+                continue
+
             published_dt = parse_published(e)
             if published_dt is None or published_dt < cutoff or published_dt > now + timedelta(hours=1):
                 continue
             key = hashlib.sha256(url.encode()).hexdigest()
             seen.append((key, title, url, published))
+
     out, keys = [], set()
     for row in seen:
         if row[0] not in keys:
             keys.add(row[0])
             out.append(row)
     return out
-
 
 def notify_new_items():
     con = db()
