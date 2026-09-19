@@ -150,6 +150,13 @@ QUERIES = [
     "ヤマダ電機 ポケカ 抽選", "TSUTAYA ポケカ 抽選", "GEO ポケカ 抽選",
     "セブンネット ポケカ 抽選", "イオン ポケカ 抽選", "トイザらス ポケカ 抽選",
     "カードショップ ポケカ 抽選",
+    "GEO ポケカ 抽選販売", "ゲオ ポケカ 抽選販売", "GEO ポケモンカード 抽選",
+    "Amazon ポケカ 抽選販売", "Amazon ポケモンカード 抽選",
+    "ビックカメラ ポケカ 抽選販売", "ビックカメラ ポケモンカード 抽選",
+    "ヨドバシ ポケカ 抽選販売", "ヨドバシ ポケモンカード 抽選",
+    "バトロコ ポケカ 抽選", "バトロコ ポケモンカード 抽選",
+    "PAO ポケカ 抽選", "PAO ポケモンカード 抽選", "流星のPAO ポケカ 抽選",
+    "エディオン ポケカ 抽選", "EDION ポケカ 抽選", "エディオン ポケモンカード 抽選",
     "site:livepocket.jp/e ポケカ 抽選",
     "site:livepocket.jp/e ポケモンカード 抽選",
     "site:livepocket.jp/e ポケカ 応募",
@@ -168,6 +175,10 @@ EXCLUDE_WORDS = (
 
 DIRECT_LIVEPOCKET = os.getenv("DIRECT_LIVEPOCKET", "true").lower() in ("1", "true", "yes", "on")
 LIVEPOCKET_SEARCH_QUERIES = ("ポケカ", "ポケモンカード")
+
+OFFICIAL_LIST_PAGES = (
+    ("GEO", "https://geo-online.co.jp/news/"),
+)
 
 
 def livepocket_search_url(query):
@@ -213,6 +224,47 @@ def fetch_livepocket_items():
     return list(seen.values())
 
 
+def fetch_official_list_items():
+    seen = {}
+    now = datetime.now(timezone.utc)
+    cutoff = now - timedelta(days=3)
+    headers = {
+        "User-Agent": "Mozilla/5.0 (compatible; PokecaLotteryBot/1.0)",
+        "Accept-Language": "ja-JP,ja;q=0.9",
+    }
+    for shop, page_url in OFFICIAL_LIST_PAGES:
+        try:
+            r = requests.get(page_url, headers=headers, timeout=20)
+            r.raise_for_status()
+            soup = BeautifulSoup(r.text, "html.parser")
+            for a in soup.select('a[href]'):
+                href = a.get("href", "").strip()
+                title = a.get_text(" ", strip=True)
+                if not title or not any(w.lower() in title.lower() for w in CARD_WORDS):
+                    continue
+                if not any(w.lower() in title.lower() for w in ACTION_WORDS):
+                    continue
+                if any(w.lower() in title.lower() for w in EXCLUDE_WORDS):
+                    continue
+                url = requests.compat.urljoin(page_url, href.split("?")[0])
+                if not url.startswith("https://geo-online.co.jp/news/"):
+                    continue
+                parent = a.find_parent(["article", "li", "div", "tr"]) or a.parent
+                text = parent.get_text(" ", strip=True) if parent else title
+                import re
+                m = re.search(r"(20\\d{2})[./年](\\d{1,2})[./月](\\d{1,2})", text)
+                if not m:
+                    continue
+                published_dt = datetime(int(m.group(1)), int(m.group(2)), int(m.group(3)), tzinfo=timezone.utc)
+                if published_dt < cutoff or published_dt > now + timedelta(days=1):
+                    continue
+                key = hashlib.sha256(url.encode()).hexdigest()
+                seen[key] = (key, title, url, published_dt.isoformat())
+        except Exception as e:
+            print("Official shop monitor error:", shop, e)
+    return list(seen.values())
+
+
 def parse_published(entry):
     value = entry.get("published_parsed") or entry.get("updated_parsed")
     if not value:
@@ -235,7 +287,8 @@ def fetch_items():
             published = e.get("published", "")
             if not title or not url:
                 continue
-            hay = title.lower()
+            summary = BeautifulSoup(e.get("summary", ""), "html.parser").get_text(" ", strip=True)
+            hay = (title + " " + summary).lower()
             if not any(word.lower() in hay for word in CARD_WORDS):
                 continue
             if not any(word.lower() in hay for word in ACTION_WORDS):
@@ -267,7 +320,7 @@ def notify_new_items():
     con = db()
     users = [r[0] for r in con.execute("SELECT user_id FROM users").fetchall()]
     count = 0
-    all_items = fetch_items() + fetch_livepocket_items()
+    all_items = fetch_items() + fetch_livepocket_items() + fetch_official_list_items()
     dedup = {}
     for row in all_items:
         dedup[row[0]] = row
