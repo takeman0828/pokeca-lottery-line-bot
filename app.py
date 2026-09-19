@@ -1,6 +1,7 @@
 import os, sqlite3, hashlib, hmac
 from datetime import datetime, timezone, timedelta
 from urllib.parse import quote
+from bs4 import BeautifulSoup
 import requests
 import feedparser
 from flask import Flask, request, abort
@@ -165,6 +166,53 @@ EXCLUDE_WORDS = (
     "ニュース記事", "報道", "メディア"
 )
 
+DIRECT_LIVEPOCKET = os.getenv("DIRECT_LIVEPOCKET", "true").lower() in ("1", "true", "yes", "on")
+LIVEPOCKET_SEARCH_QUERIES = ("ポケカ", "ポケモンカード")
+
+
+def livepocket_search_url(query):
+    return "https://livepocket.jp/event/search?" + quote("keyword") + "=" + quote(query)
+
+
+def fetch_livepocket_items():
+    if not DIRECT_LIVEPOCKET:
+        return []
+    seen = {}
+    headers = {
+        "User-Agent": "Mozilla/5.0 (compatible; PokecaLotteryBot/1.0)",
+        "Accept-Language": "ja-JP,ja;q=0.9",
+    }
+    for q in LIVEPOCKET_SEARCH_QUERIES:
+        try:
+            r = requests.get(livepocket_search_url(q), headers=headers, timeout=20)
+            r.raise_for_status()
+            soup = BeautifulSoup(r.text, "html.parser")
+            for a in soup.select('a[href*="/e/"]'):
+                href = a.get("href", "").strip()
+                if not href.startswith("/e/"):
+                    continue
+                url = "https://livepocket.jp" + href.split("?")[0]
+                card = a.find_parent(["article", "li", "div"])
+                text = (card.get_text(" ", strip=True) if card else a.get_text(" ", strip=True)).strip()
+                title = a.get_text(" ", strip=True) or text[:200]
+                hay = (title + " " + text).lower()
+                if not any(w.lower() in hay for w in CARD_WORDS):
+                    continue
+                if not any(w.lower() in hay for w in ACTION_WORDS):
+                    continue
+                if any(w.lower() in hay for w in EXCLUDE_WORDS):
+                    continue
+                if any(w in text for w in ("受付終了", "販売終了", "募集終了")):
+                    continue
+                if not any(w in text for w in ("抽選", "応募", "受付", "販売前", "販売中")):
+                    continue
+                key = hashlib.sha256(url.encode()).hexdigest()
+                seen[key] = (key, title, url, "")
+        except Exception as e:
+            print("LivePocket direct monitor error:", q, e)
+    return list(seen.values())
+
+
 def parse_published(entry):
     value = entry.get("published_parsed") or entry.get("updated_parsed")
     if not value:
@@ -219,7 +267,11 @@ def notify_new_items():
     con = db()
     users = [r[0] for r in con.execute("SELECT user_id FROM users").fetchall()]
     count = 0
-    for key, title, url, published in fetch_items():
+    all_items = fetch_items() + fetch_livepocket_items()
+    dedup = {}
+    for row in all_items:
+        dedup[row[0]] = row
+    for key, title, url, published in dedup.values():
         exists = con.execute("SELECT 1 FROM items WHERE item_key=?", (key,)).fetchone()
         if exists:
             continue
