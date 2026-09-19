@@ -37,7 +37,7 @@ def line_push(user_id, text):
             "Content-Type": "application/json",
         },
         json={"to": user_id, "messages": [{"type": "text", "text": text}]},
-        timeout=20,
+        timeout=4,
     )
     r.raise_for_status()
 
