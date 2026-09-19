@@ -178,7 +178,16 @@ LIVEPOCKET_SEARCH_QUERIES = ("ポケカ", "ポケモンカード")
 
 OFFICIAL_LIST_PAGES = (
     ("GEO", "https://geo-online.co.jp/news/"),
+    ("BicCamera", "https://www.biccamera.com/bc/c/info/order/lottery.jsp"),
+    ("EDION", "https://www.edion.com/special.html"),
+    ("PAO", "https://pao-onlineshop.com/view/news/list"),
+    ("Bato-Loco", "https://bato-loco.com/"),
+    ("Amazon", "https://www.amazon.co.jp/s?k=%E3%83%9D%E3%82%B1%E3%83%A2%E3%83%B3%E3%82%AB%E3%83%BC%E3%83%89+%E6%8A%BD%E9%81%B8"),
+    ("Yodobashi", "https://www.yodobashi.com/?word=%E3%83%9D%E3%82%B1%E3%83%A2%E3%83%B3%E3%82%AB%E3%83%BC%E3%83%89+%E6%8A%BD%E9%81%B8"),
 )
+
+# 公式ページから直接拾う監視先。Google Newsは補助として残すが、
+# 抽選・応募・予約・受付に関係する公式ページを優先する。
 
 
 def livepocket_search_url(query):
@@ -237,33 +246,68 @@ def fetch_official_list_items():
             r = requests.get(page_url, headers=headers, timeout=20)
             r.raise_for_status()
             soup = BeautifulSoup(r.text, "html.parser")
+
+            # 各社公式ページ内の「抽選・応募・予約・受付」に関係するリンクを直接監視。
             for a in soup.select('a[href]'):
                 href = a.get("href", "").strip()
                 title = a.get_text(" ", strip=True)
-                if not title or not any(w.lower() in title.lower() for w in CARD_WORDS):
+                if not href or not title:
                     continue
-                if not any(w.lower() in title.lower() for w in ACTION_WORDS):
+
+                parent = a.find_parent(["article", "li", "div", "tr", "section"]) or a.parent
+                text = parent.get_text(" ", strip=True) if parent else title
+                hay = (title + " " + text).lower()
+
+                if not any(w.lower() in hay for w in CARD_WORDS):
+                    continue
+                if not any(w.lower() in hay for w in ACTION_WORDS):
                     continue
                 if any(w.lower() in title.lower() for w in EXCLUDE_WORDS):
                     continue
-                url = requests.compat.urljoin(page_url, href.split("?")[0])
-                if not url.startswith("https://geo-online.co.jp/news/"):
+                if any(w in text for w in ("受付終了", "募集終了", "販売終了")):
                     continue
-                parent = a.find_parent(["article", "li", "div", "tr"]) or a.parent
-                text = parent.get_text(" ", strip=True) if parent else title
+
+                url = requests.compat.urljoin(page_url, href.split("?")[0])
+
+                if shop == "GEO":
+                    if not url.startswith("https://geo-online.co.jp/news/"):
+                        continue
+                elif shop == "BicCamera":
+                    if "biccamera.com" not in url:
+                        continue
+                elif shop == "EDION":
+                    if "edion.com" not in url:
+                        continue
+                elif shop == "PAO":
+                    if "pao-onlineshop.com" not in url:
+                        continue
+                elif shop == "Bato-Loco":
+                    if "bato-loco.com" not in url:
+                        continue
+                elif shop == "Amazon":
+                    if "amazon.co.jp" not in url:
+                        continue
+                elif shop == "Yodobashi":
+                    if "yodobashi.com" not in url:
+                        continue
+
                 import re
                 m = re.search(r"(20\\d{2})[./年](\\d{1,2})[./月](\\d{1,2})", text)
-                if not m:
-                    continue
-                published_dt = datetime(int(m.group(1)), int(m.group(2)), int(m.group(3)), tzinfo=timezone.utc)
-                if published_dt < cutoff or published_dt > now + timedelta(days=1):
-                    continue
+                published_dt = None
+                if m:
+                    published_dt = datetime(
+                        int(m.group(1)), int(m.group(2)), int(m.group(3)),
+                        tzinfo=timezone.utc
+                    )
+                    if published_dt < cutoff or published_dt > now + timedelta(days=1):
+                        continue
+
                 key = hashlib.sha256(url.encode()).hexdigest()
-                seen[key] = (key, title, url, published_dt.isoformat())
+                seen[key] = (key, title, url, published_dt.isoformat() if published_dt else "")
+
         except Exception as e:
             print("Official shop monitor error:", shop, e)
     return list(seen.values())
-
 
 def parse_published(entry):
     value = entry.get("published_parsed") or entry.get("updated_parsed")
