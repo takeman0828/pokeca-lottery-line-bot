@@ -140,7 +140,7 @@ def google_news_url(query):
         f"q={quote(query)}&hl=ja&gl=JP&ceid=JP:ja"
     )
 
-QUERIES = [
+DEFAULT_QUERIES = [
     "ポケカ 抽選", "ポケモンカード 抽選", "ポケカ 応募", "ポケモンカード 応募",
     "ポケカ 予約 抽選", "ポケモンカード 予約 抽選", "ポケカ BOX 抽選",
     "ポケモンカード BOX 抽選", "ポケカ 抽選受付", "ポケモンカード 抽選受付",
@@ -162,6 +162,18 @@ QUERIES = [
     "site:livepocket.jp/e ポケカ 応募",
     "site:livepocket.jp/e ポケモンカード 予約 抽選",
 ]
+
+def load_queries():
+    path = os.path.join(os.path.dirname(__file__), "queries.txt")
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            queries = [line.strip() for line in f if line.strip() and not line.lstrip().startswith("#")]
+        return list(dict.fromkeys(queries + DEFAULT_QUERIES))
+    except Exception as e:
+        print("queries.txt load error:", e)
+        return DEFAULT_QUERIES
+
+QUERIES = load_queries()
 
 CARD_WORDS = ("ポケカ", "ポケモンカード", "ポケモンカードゲーム")
 ACTION_WORDS = ("抽選", "応募", "予約", "受付")
