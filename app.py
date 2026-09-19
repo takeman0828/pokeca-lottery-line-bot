@@ -177,13 +177,35 @@ DIRECT_LIVEPOCKET = os.getenv("DIRECT_LIVEPOCKET", "true").lower() in ("1", "tru
 LIVEPOCKET_SEARCH_QUERIES = ("ポケカ", "ポケモンカード")
 
 OFFICIAL_LIST_PAGES = (
+    # Pokémon公式
+    ("PokemonCenterOnline", "https://www.pokemoncenter-online.com/news/"),
+    ("PokemonCenter", "https://shop.pokemon.co.jp/ja/"),
+    # 大手量販店・家電
     ("GEO", "https://geo-online.co.jp/news/"),
     ("BicCamera", "https://www.biccamera.com/bc/c/info/order/lottery.jsp"),
     ("EDION", "https://www.edion.com/special.html"),
+    ("Yodobashi", "https://www.yodobashi.com/?word=%E3%83%9D%E3%82%B1%E3%83%A2%E3%83%B3%E3%82%AB%E3%83%BC%E3%83%89+%E6%8A%BD%E9%81%B8"),
+    ("Joshin", "https://store.joshin.co.jp/"),
+    ("Yamada", "https://www.yamada-denki.jp/"),
+    ("Kojima", "https://www.kojima.net/"),
+    ("Nojima", "https://www.nojima.co.jp/"),
+    ("Sofmap", "https://www.sofmap.com/"),
+    # 総合小売・EC
+    ("Amazon", "https://www.amazon.co.jp/s?k=%E3%83%9D%E3%82%B1%E3%83%A2%E3%83%B3%E3%82%AB%E3%83%BC%E3%83%89+%E6%8A%BD%E9%81%B8"),
+    ("7net", "https://7net.omni7.jp/"),
+    ("AEON", "https://www.aeonretail.jp/"),
+    ("Donki", "https://www.donki.com/"),
+    ("ItoYokado", "https://www.itoyokado.co.jp/"),
+    ("ToysRUs", "https://www.toysrus.co.jp/"),
+    # トレカ・カードショップ
     ("PAO", "https://pao-onlineshop.com/view/news/list"),
     ("Bato-Loco", "https://bato-loco.com/"),
-    ("Amazon", "https://www.amazon.co.jp/s?k=%E3%83%9D%E3%82%B1%E3%83%A2%E3%83%B3%E3%82%AB%E3%83%BC%E3%83%89+%E6%8A%BD%E9%81%B8"),
-    ("Yodobashi", "https://www.yodobashi.com/?word=%E3%83%9D%E3%82%B1%E3%83%A2%E3%83%B3%E3%82%AB%E3%83%BC%E3%83%89+%E6%8A%BD%E9%81%B8"),
+    ("DragonStar", "https://www.dragonstar.co.jp/"),
+    ("CardBox", "https://cardbox.sc/"),
+    ("BeeHonpo", "https://www.beehonpo.com/"),
+    ("Hareruya2", "https://www.hareruya2.com/"),
+    ("Surugaya", "https://www.suruga-ya.jp/"),
+    ("BookOff", "https://www.bookoff.co.jp/"),
 )
 
 # 公式ページから直接拾う監視先。Google Newsは補助として残すが、
@@ -269,8 +291,14 @@ def fetch_official_list_items():
 
                 url = requests.compat.urljoin(page_url, href.split("?")[0])
 
-                if shop == "GEO":
-                    if not url.startswith("https://geo-online.co.jp/news/"):
+                if shop == "PokemonCenterOnline":
+                    if "pokemoncenter-online.com" not in url:
+                        continue
+                elif shop == "PokemonCenter":
+                    if "pokemon.co.jp" not in url and "shop.pokemon.co.jp" not in url:
+                        continue
+                elif shop == "GEO":
+                    if "geo-online.co.jp" not in url:
                         continue
                 elif shop == "BicCamera":
                     if "biccamera.com" not in url:
@@ -290,9 +318,57 @@ def fetch_official_list_items():
                 elif shop == "Yodobashi":
                     if "yodobashi.com" not in url:
                         continue
+                elif shop == "Joshin":
+                    if "joshin.co.jp" not in url:
+                        continue
+                elif shop == "Yamada":
+                    if "yamada-denki.jp" not in url:
+                        continue
+                elif shop == "Kojima":
+                    if "kojima.net" not in url:
+                        continue
+                elif shop == "Nojima":
+                    if "nojima.co.jp" not in url:
+                        continue
+                elif shop == "Sofmap":
+                    if "sofmap.com" not in url:
+                        continue
+                elif shop == "7net":
+                    if "7net.omni7.jp" not in url:
+                        continue
+                elif shop == "AEON":
+                    if "aeonretail.jp" not in url:
+                        continue
+                elif shop == "Donki":
+                    if "donki.com" not in url:
+                        continue
+                elif shop == "ItoYokado":
+                    if "itoyokado.co.jp" not in url:
+                        continue
+                elif shop == "ToysRUs":
+                    if "toysrus.co.jp" not in url:
+                        continue
+                elif shop == "DragonStar":
+                    if "dragonstar.co.jp" not in url:
+                        continue
+                elif shop == "CardBox":
+                    if "cardbox.sc" not in url:
+                        continue
+                elif shop == "BeeHonpo":
+                    if "beehonpo.com" not in url:
+                        continue
+                elif shop == "Hareruya2":
+                    if "hareruya2.com" not in url:
+                        continue
+                elif shop == "Surugaya":
+                    if "suruga-ya.jp" not in url:
+                        continue
+                elif shop == "BookOff":
+                    if "bookoff.co.jp" not in url:
+                        continue
 
                 import re
-                m = re.search(r"(20\\d{2})[./年](\\d{1,2})[./月](\\d{1,2})", text)
+                m = re.search(r"(20\d{2})[./年](\d{1,2})[./月](\d{1,2})", text)
                 published_dt = None
                 if m:
                     published_dt = datetime(
@@ -319,7 +395,11 @@ def parse_published(entry):
     except Exception:
         return None
 
+ENABLE_GOOGLE_NEWS = os.getenv("ENABLE_GOOGLE_NEWS", "false").lower() in ("1", "true", "yes", "on")
+
 def fetch_items():
+    if not ENABLE_GOOGLE_NEWS:
+        return []
     seen = []
     now = datetime.now(timezone.utc)
     cutoff = now - timedelta(days=3)
