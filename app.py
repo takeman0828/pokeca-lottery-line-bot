@@ -270,7 +270,6 @@ def fetch_livepocket_items():
 def fetch_official_list_items():
     seen = {}
     now = datetime.now(timezone.utc)
-    cutoff = now - timedelta(days=3)
     headers = {
         "User-Agent": "Mozilla/5.0 (compatible; PokecaLotteryBot/1.0)",
         "Accept-Language": "ja-JP,ja;q=0.9",
@@ -387,7 +386,7 @@ def fetch_official_list_items():
                         int(m.group(1)), int(m.group(2)), int(m.group(3)),
                         tzinfo=timezone.utc
                     )
-                    if published_dt < cutoff or published_dt > now + timedelta(days=1):
+                    if published_dt > now + timedelta(days=1):
                         continue
 
                 key = hashlib.sha256(url.encode()).hexdigest()
@@ -456,6 +455,8 @@ def notify_new_items():
     con = db()
     users = [r[0] for r in con.execute("SELECT user_id FROM users").fetchall()]
     count = 0
+    # 現在応募中の情報は掲載から3日以上経過していても拾う。
+    # 新規掲載も同じく拾い、終了表記のあるものは各取得側で除外する。
     all_items = fetch_items() + fetch_livepocket_items() + fetch_official_list_items()
     dedup = {}
     for row in all_items:
