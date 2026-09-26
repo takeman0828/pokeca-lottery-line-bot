@@ -454,12 +454,8 @@ def fetch_items():
 def notify_new_items():
     con = db()
     users = [r[0] for r in con.execute("SELECT user_id FROM users").fetchall()]
-    if not users:
-        print("NO REGISTERED LINE USERS")
-        con.close()
-        return {"new": 0, "users": 0, "sent": 0, "sources": 0}
 
-    # 各取得元を個別に実行して、どこまで拾えているかログに残す。
+    # ユーザー登録の有無に関係なく先に情報源をスキャンする。
     google_items = fetch_items()
     livepocket_items = fetch_livepocket_items()
     official_items = fetch_official_list_items()
@@ -472,6 +468,22 @@ def notify_new_items():
         f"official={len(official_items)}",
         f"users={len(users)}"
     )
+
+    if not users:
+        print("NO REGISTERED LINE USERS")
+        con.close()
+        return {
+            "new": 0,
+            "users": 0,
+            "sent": 0,
+            "failed": 0,
+            "sources": {
+                "google": len(google_items),
+                "livepocket": len(livepocket_items),
+                "official": len(official_items),
+                "unique": len(set(row[0] for row in all_items)),
+            },
+        }
 
     dedup = {}
     for row in all_items:
