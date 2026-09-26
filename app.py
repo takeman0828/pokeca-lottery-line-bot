@@ -238,7 +238,7 @@ def fetch_livepocket_items():
     }
     for q in LIVEPOCKET_SEARCH_QUERIES:
         try:
-            r = requests.get(livepocket_search_url(q), headers=headers, timeout=20)
+            r = requests.get(livepocket_search_url(q), headers=headers, timeout=5)
             r.raise_for_status()
             soup = BeautifulSoup(r.text, "html.parser")
             for a in soup.select('a[href*="/e/"]'):
@@ -276,7 +276,7 @@ def fetch_official_list_items():
     }
     for shop, page_url in OFFICIAL_LIST_PAGES:
         try:
-            r = requests.get(page_url, headers=headers, timeout=20)
+            r = requests.get(page_url, headers=headers, timeout=5)
             r.raise_for_status()
             soup = BeautifulSoup(r.text, "html.parser")
 
@@ -454,31 +454,74 @@ def fetch_items():
 def notify_new_items():
     con = db()
     users = [r[0] for r in con.execute("SELECT user_id FROM users").fetchall()]
-    count = 0
-    # 現在応募中の情報は掲載から3日以上経過していても拾う。
-    # 新規掲載も同じく拾い、終了表記のあるものは各取得側で除外する。
-    all_items = fetch_items() + fetch_livepocket_items() + fetch_official_list_items()
+    if not users:
+        print("NO REGISTERED LINE USERS")
+        con.close()
+        return {"new": 0, "users": 0, "sent": 0, "sources": 0}
+
+    # 各取得元を個別に実行して、どこまで拾えているかログに残す。
+    google_items = fetch_items()
+    livepocket_items = fetch_livepocket_items()
+    official_items = fetch_official_list_items()
+    all_items = google_items + livepocket_items + official_items
+
+    print(
+        "SCAN COUNTS:",
+        f"google={len(google_items)}",
+        f"livepocket={len(livepocket_items)}",
+        f"official={len(official_items)}",
+        f"users={len(users)}"
+    )
+
     dedup = {}
     for row in all_items:
         dedup[row[0]] = row
+
+    new_count = 0
+    sent_count = 0
+    failed_count = 0
+
     for key, title, url, published in dedup.values():
         exists = con.execute("SELECT 1 FROM items WHERE item_key=?", (key,)).fetchone()
         if exists:
             continue
-        con.execute(
-            "INSERT INTO items(item_key,title,url,published,created_at) VALUES(?,?,?,?,?)",
-            (key, title, url, published, datetime.now(timezone.utc).isoformat())
-        )
-        con.commit()
+
         msg = f"🎴 ポケカ抽選情報\n\n{title}\n\n🔗 {url}"
+        item_sent = 0
         for user in users:
             try:
                 line_push(user, msg)
+                item_sent += 1
+                sent_count += 1
             except Exception as e:
+                failed_count += 1
                 print("LINE push error:", e)
-        count += 1
+
+        # 1人以上への送信成功後だけ既読登録する。
+        # 送信失敗なら次回チェックで再試行できる。
+        if item_sent > 0:
+            con.execute(
+                "INSERT INTO items(item_key,title,url,published,created_at) VALUES(?,?,?,?,?)",
+                (key, title, url, published, datetime.now(timezone.utc).isoformat())
+            )
+            con.commit()
+            new_count += 1
+        else:
+            print("ITEM NOT MARKED AS SENT:", title)
+
     con.close()
-    return count
+    return {
+        "new": new_count,
+        "users": len(users),
+        "sent": sent_count,
+        "failed": failed_count,
+        "sources": {
+            "google": len(google_items),
+            "livepocket": len(livepocket_items),
+            "official": len(official_items),
+            "unique": len(dedup),
+        },
+    }
 
 if __name__ == "__main__":
     print("new:", notify_new_items())
