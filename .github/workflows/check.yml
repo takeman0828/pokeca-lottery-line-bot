@@ -16,6 +16,17 @@ jobs:
           BOT_URL: https://pokeca-lottery-line-bot.onrender.com/check
           CHECK_TOKEN: ${{ secrets.CHECK_TOKEN }}
         run: |
-          curl --fail --show-error \
-            -H "Authorization: Bearer ${CHECK_TOKEN}" \
-            "${BOT_URL}"
+          for i in 1 2 3 4 5; do
+            echo "Check attempt $i/5"
+            if curl --fail --show-error --connect-timeout 10 --max-time 90 \
+              -H "Authorization: Bearer ${CHECK_TOKEN}" \
+              "${BOT_URL}"; then
+              exit 0
+            fi
+            if [ "$i" -lt 5 ]; then
+              echo "Bot is not ready yet. Waiting 15 seconds..."
+              sleep 15
+            fi
+          done
+          echo "Bot check failed after 5 attempts"
+          exit 1
