@@ -291,9 +291,10 @@ def fetch_official_list_items():
                 text = parent.get_text(" ", strip=True) if parent else title
                 hay = (title + " " + text).lower()
 
-                if not any(w.lower() in hay for w in CARD_WORDS):
+                # 通知の誤検出を避けるため、カード名と抽選等の語はリンクタイトル自体に必須。
+                if not any(w.lower() in title.lower() for w in CARD_WORDS):
                     continue
-                if not any(w.lower() in hay for w in ACTION_WORDS):
+                if not any(w.lower() in title.lower() for w in ACTION_WORDS):
                     continue
                 if any(w.lower() in title.lower() for w in EXCLUDE_WORDS):
                     continue
