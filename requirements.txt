@@ -3,3 +3,4 @@ requests>=2.32,<3
 feedparser>=6.0,<7
 gunicorn>=23,<24
 beautifulsoup4>=4.13,<5
+psycopg[binary]>=3.2,<4
