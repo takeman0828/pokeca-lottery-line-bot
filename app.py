@@ -7,14 +7,41 @@ import feedparser
 from flask import Flask, request, abort
 
 DB = os.getenv("DB_PATH", "pokeca.db")
+DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
 LINE_TOKEN = os.environ["LINE_CHANNEL_ACCESS_TOKEN"]
 LINE_SECRET = os.environ["LINE_CHANNEL_SECRET"]
 PORT = int(os.getenv("PORT", "8080"))
 
 app = Flask(__name__)
 
+class DBAdapter:
+    """Small adapter so the app can use either SQLite or persistent PostgreSQL."""
+    def __init__(self, connection, postgres=False):
+        self.connection = connection
+        self.postgres = postgres
+
+    def execute(self, sql, params=()):
+        if self.postgres:
+            sql = sql.replace("?", "%s")
+        return self.connection.execute(sql, params)
+
+    def commit(self):
+        self.connection.commit()
+
+    def close(self):
+        self.connection.close()
+
+
 def db():
-    con = sqlite3.connect(DB)
+    if DATABASE_URL:
+        import psycopg
+        url = DATABASE_URL
+        if url.startswith("postgres://"):
+            url = "postgresql://" + url[len("postgres://"):]
+        con = DBAdapter(psycopg.connect(url), postgres=True)
+    else:
+        con = DBAdapter(sqlite3.connect(DB))
+
     con.execute("""CREATE TABLE IF NOT EXISTS users(
         user_id TEXT PRIMARY KEY,
         created_at TEXT NOT NULL
@@ -117,7 +144,7 @@ def callback():
         if not user:
             continue
         con.execute(
-            "INSERT OR IGNORE INTO users(user_id, created_at) VALUES(?,?)",
+            "INSERT INTO users(user_id, created_at) VALUES(?,?) ON CONFLICT(user_id) DO NOTHING",
             (user, datetime.now(timezone.utc).isoformat())
         )
         con.commit()
