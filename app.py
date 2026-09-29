@@ -482,6 +482,8 @@ def notify_new_items():
                 "livepocket": len(livepocket_items),
                 "official": len(official_items),
                 "unique": len(set(row[0] for row in all_items)),
+                "candidate_titles": [row[1] for row in all_items[:10]],
+                "candidate_urls": [row[2] for row in all_items[:10]],
             },
         }
 
@@ -532,6 +534,8 @@ def notify_new_items():
             "livepocket": len(livepocket_items),
             "official": len(official_items),
             "unique": len(dedup),
+            "candidate_titles": [row[1] for row in list(dedup.values())[:10]],
+            "candidate_urls": [row[2] for row in list(dedup.values())[:10]],
         },
     }
 
