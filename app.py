@@ -274,10 +274,16 @@ def livepocket_search_url(query):
     return "https://livepocket.jp/event/search?" + quote("keyword") + "=" + quote(query)
 
 
+LAST_SOURCE_STATUS = {}
+
+
 def fetch_livepocket_items():
+    global LAST_SOURCE_STATUS
     if not DIRECT_LIVEPOCKET:
+        LAST_SOURCE_STATUS["LivePocket"] = {"status": "disabled", "matches": 0}
         return []
     seen = {}
+    query_status = []
     headers = {
         "User-Agent": "Mozilla/5.0 (compatible; PokecaLotteryBot/1.0)",
         "Accept-Language": "ja-JP,ja;q=0.9",
@@ -287,7 +293,9 @@ def fetch_livepocket_items():
             r = requests.get(livepocket_search_url(q), headers=headers, timeout=5)
             r.raise_for_status()
             soup = BeautifulSoup(r.text, "html.parser")
-            for a in soup.select('a[href*="/e/"]'):
+            matches_before = len(seen)
+            event_links = soup.select('a[href*="/e/"]')
+            for a in event_links:
                 href = a.get("href", "").strip()
                 if not href.startswith("/e/"):
                     continue
@@ -308,13 +316,18 @@ def fetch_livepocket_items():
                     continue
                 key = hashlib.sha256(url.encode()).hexdigest()
                 seen[key] = (key, title, url, "")
+            query_status.append({"query": q, "status": r.status_code, "event_links": len(event_links), "new_matches": len(seen) - matches_before})
         except Exception as e:
             print("LivePocket direct monitor error:", q, e)
+            query_status.append({"query": q, "status": "error", "error": str(e)[:160]})
+    LAST_SOURCE_STATUS["LivePocket"] = {"status": "checked", "matches": len(seen), "queries": query_status}
     return list(seen.values())
 
 
 def fetch_official_list_items():
+    global LAST_SOURCE_STATUS
     seen = {}
+    shop_status = []
     now = datetime.now(timezone.utc)
     headers = {
         "User-Agent": "Mozilla/5.0 (compatible; PokecaLotteryBot/1.0)",
@@ -324,11 +337,14 @@ def fetch_official_list_items():
         # Amazon search results and product pages are not lottery announcements.
         # They frequently mention Pokémon cards and card-search tools, causing false positives.
         if shop == "Amazon":
+            shop_status.append({"shop": shop, "status": "disabled", "matches": 0})
             continue
         try:
             r = requests.get(page_url, headers=headers, timeout=5)
             r.raise_for_status()
             soup = BeautifulSoup(r.text, "html.parser")
+            links_seen = len(soup.select('a[href]'))
+            matches_before = len(seen)
 
             # 各社公式ページ内の「抽選・応募・予約・受付」に関係するリンクを直接監視。
             for a in soup.select('a[href]'):
@@ -453,9 +469,12 @@ def fetch_official_list_items():
 
                 key = hashlib.sha256(url.encode()).hexdigest()
                 seen[key] = (key, title, url, published_dt.isoformat() if published_dt else "")
+            shop_status.append({"shop": shop, "status": r.status_code, "links": links_seen, "new_matches": len(seen) - matches_before})
 
         except Exception as e:
             print("Official shop monitor error:", shop, e)
+            shop_status.append({"shop": shop, "status": "error", "error": str(e)[:160]})
+    LAST_SOURCE_STATUS["Official"] = {"status": "checked", "matches": len(seen), "shops": shop_status}
     return list(seen.values())
 
 def is_generic_search_url(url):
@@ -526,6 +545,7 @@ def notify_new_items():
                 "unique": len(set(row[0] for row in all_items)),
                 "candidate_titles": [row[1] for row in all_items[:10]],
                 "candidate_urls": [row[2] for row in all_items[:10]],
+                "source_status": LAST_SOURCE_STATUS,
             },
         }
 
@@ -578,6 +598,7 @@ def notify_new_items():
             "unique": len(dedup),
             "candidate_titles": [row[1] for row in list(dedup.values())[:10]],
             "candidate_urls": [row[2] for row in list(dedup.values())[:10]],
+            "source_status": LAST_SOURCE_STATUS,
         },
     }
 
