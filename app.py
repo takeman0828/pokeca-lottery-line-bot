@@ -354,6 +354,9 @@ def fetch_official_list_items():
                 elif shop == "Amazon":
                     if "amazon.co.jp" not in url:
                         continue
+                    # Never notify generic Amazon search pages as lottery listings.
+                    if url.rstrip("/").lower() in ("https://www.amazon.co.jp/s", "https://amazon.co.jp/s"):
+                        continue
                 elif shop == "Yodobashi":
                     if "yodobashi.com" not in url:
                         continue
