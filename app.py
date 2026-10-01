@@ -337,11 +337,13 @@ def fetch_official_list_items():
                 text = parent.get_text(" ", strip=True) if parent else title
                 hay = (title + " " + text).lower()
 
-                # 通知の誤検出を避けるため、カード名と抽選等の語はリンクタイトル自体に必須。
-                if not any(w.lower() in title.lower() for w in CARD_WORDS):
+                # Match card/action terms in the link plus its nearby text.
+                # Official lottery links often have short labels such as "応募はこちら".
+                if not any(w.lower() in hay for w in CARD_WORDS):
                     continue
-                if not any(w.lower() in title.lower() for w in ACTION_WORDS):
+                if not any(w.lower() in hay for w in ACTION_WORDS):
                     continue
+                # Exclude news/editorial links by their own title, not the entire parent block.
                 if any(w.lower() in title.lower() for w in EXCLUDE_WORDS):
                     continue
                 if any(w in text for w in ("受付終了", "募集終了", "販売終了")):
@@ -350,6 +352,9 @@ def fetch_official_list_items():
                 url = requests.compat.urljoin(page_url, href.split("?")[0])
 
                 if is_generic_search_url(url):
+                    continue
+                parsed_url = urlsplit(url)
+                if not parsed_url.path or parsed_url.path == "/":
                     continue
 
                 if shop == "PokemonCenterOnline":
