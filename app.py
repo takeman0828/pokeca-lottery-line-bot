@@ -311,8 +311,14 @@ def fetch_livepocket_items():
                 is_excluded = any(w.lower() in hay for w in EXCLUDE_WORDS)
                 if has_card:
                     card_hits += 1
-                    if len(examples) < 8:
-                        examples.append({"title": title[:100], "text": text[:180]})
+                # Keep a small sample of event titles/text for diagnosing markup mismatches.
+                if len(examples) < 8:
+                    examples.append({
+                        "title": title[:100],
+                        "text": text[:180],
+                        "card_keyword": has_card,
+                        "action_keyword": has_action if "has_action" in locals() else any(w.lower() in hay for w in ACTION_WORDS),
+                    })
                 if has_action:
                     action_hits += 1
                 if is_excluded:
