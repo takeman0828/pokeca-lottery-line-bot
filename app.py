@@ -480,6 +480,14 @@ def notify_new_items():
     con = db()
     users = [r[0] for r in con.execute("SELECT user_id FROM users").fetchall()]
 
+    # Remove legacy false positives that may have been saved by older versions.
+    # Google News articles are no longer a supported source.
+    for item_key, item_url in con.execute("SELECT item_key, url FROM items").fetchall():
+        host = (urlsplit(item_url).hostname or "").lower()
+        if is_generic_search_url(item_url) or host == "news.google.com":
+            con.execute("DELETE FROM items WHERE item_key=?", (item_key,))
+    con.commit()
+
     # ユーザー登録の有無に関係なく先に情報源をスキャンする。
     google_items = fetch_items()
     livepocket_items = fetch_livepocket_items()
