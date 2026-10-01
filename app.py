@@ -1,6 +1,6 @@
 import os, sqlite3, hashlib, hmac
 from datetime import datetime, timezone, timedelta
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
 from bs4 import BeautifulSoup
 import requests
 import feedparser
@@ -349,6 +349,9 @@ def fetch_official_list_items():
 
                 url = requests.compat.urljoin(page_url, href.split("?")[0])
 
+                if is_generic_search_url(url):
+                    continue
+
                 if shop == "PokemonCenterOnline":
                     if "pokemoncenter-online.com" not in url:
                         continue
@@ -446,6 +449,16 @@ def fetch_official_list_items():
             print("Official shop monitor error:", shop, e)
     return list(seen.values())
 
+def is_generic_search_url(url):
+    """Reject generic search pages that are not a specific lottery/product page."""
+    parsed = urlsplit(url)
+    host = (parsed.hostname or "").lower()
+    path = (parsed.path or "/").rstrip("/").lower() or "/"
+    if host == "amazon.co.jp" or host.endswith(".amazon.co.jp"):
+        return path in ("/s", "/gp/search", "/gp/aw/s")
+    return False
+
+
 def parse_published(entry):
     value = entry.get("published_parsed") or entry.get("updated_parsed")
     if not value:
@@ -459,47 +472,9 @@ def parse_published(entry):
 ENABLE_GOOGLE_NEWS = os.getenv("ENABLE_GOOGLE_NEWS", "false").lower() in ("1", "true", "yes", "on")
 
 def fetch_items():
-    if not ENABLE_GOOGLE_NEWS:
-        return []
-    seen = []
-    now = datetime.now(timezone.utc)
-    cutoff = now - timedelta(days=3)
-    for q in QUERIES:
-        feed = feedparser.parse(google_news_url(q))
-        for e in feed.entries:
-            title = e.get("title", "").strip()
-            url = e.get("link", "").strip()
-            published = e.get("published", "")
-            if not title or not url:
-                continue
-            summary = BeautifulSoup(e.get("summary", ""), "html.parser").get_text(" ", strip=True)
-            hay = (title + " " + summary).lower()
-            if not any(word.lower() in hay for word in CARD_WORDS):
-                continue
-            if not any(word.lower() in hay for word in ACTION_WORDS):
-                continue
-            if any(word.lower() in hay for word in EXCLUDE_WORDS):
-                continue
-
-            # LivePocket専用検索は、実際のLivePocketページだけを通す。
-            # 通常検索から拾った記事についても、ニュース記事などは既存フィルターで除外する。
-            is_livepocket = "livepocket.jp/e/" in url.lower()
-            is_livepocket_query = q.startswith("site:livepocket.jp/e")
-            if is_livepocket_query and not is_livepocket:
-                continue
-
-            published_dt = parse_published(e)
-            if published_dt is None or published_dt < cutoff or published_dt > now + timedelta(hours=1):
-                continue
-            key = hashlib.sha256(url.encode()).hexdigest()
-            seen.append((key, title, url, published))
-
-    out, keys = [], set()
-    for row in seen:
-        if row[0] not in keys:
-            keys.add(row[0])
-            out.append(row)
-    return out
+    # Google News articles are intentionally disabled. Monitor direct LivePocket
+    # event pages and official retailer pages instead, to avoid news-article noise.
+    return []
 
 def notify_new_items():
     con = db()
