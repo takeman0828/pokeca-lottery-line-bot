@@ -16,9 +16,20 @@ jobs:
           BOT_URL: https://pokeca-lottery-line-bot.onrender.com/db-status
           CHECK_TOKEN: ${{ secrets.CHECK_TOKEN }}
         run: |
-          curl --fail --show-error --connect-timeout 10 --max-time 30 \
-            -H "Authorization: Bearer ${CHECK_TOKEN}" \
-            "${BOT_URL}"
+          for i in 1 2 3 4 5; do
+            echo "Database check attempt ${i}/5"
+            if curl --fail --show-error --connect-timeout 10 --max-time 30 \
+              -H "Authorization: Bearer ${CHECK_TOKEN}" \
+              "${BOT_URL}"; then
+              exit 0
+            fi
+            if [ "${i}" -lt 5 ]; then
+              echo "Database endpoint is not ready. Waiting 15 seconds..."
+              sleep 15
+            fi
+          done
+          echo "Database check failed after 5 attempts"
+          exit 1
       - name: Check bot
         env:
           BOT_URL: https://pokeca-lottery-line-bot.onrender.com/check
