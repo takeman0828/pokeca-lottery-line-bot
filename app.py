@@ -321,6 +321,10 @@ def fetch_official_list_items():
         "Accept-Language": "ja-JP,ja;q=0.9",
     }
     for shop, page_url in OFFICIAL_LIST_PAGES:
+        # Amazon search results and product pages are not lottery announcements.
+        # They frequently mention Pokémon cards and card-search tools, causing false positives.
+        if shop == "Amazon":
+            continue
         try:
             r = requests.get(page_url, headers=headers, timeout=5)
             r.raise_for_status()
