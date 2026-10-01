@@ -221,8 +221,14 @@ def load_queries():
 
 QUERIES = load_queries()
 
-CARD_WORDS = ("ポケカ", "ポケモンカード", "ポケモンカードゲーム")
-ACTION_WORDS = ("抽選", "応募", "予約", "受付")
+CARD_WORDS = (
+    "ポケカ", "ポケモンカード", "ポケモンカードゲーム",
+    "ポケカ30周年", "ポケモンカード30周年", "ポケモンtcg", "pokemon card",
+)
+ACTION_WORDS = (
+    "抽選", "応募", "予約", "受付", "抽選販売", "抽選受付",
+    "応募受付", "予約受付", "事前予約", "抽選応募",
+)
 EXCLUDE_WORDS = (
     "調査", "アンケート", "ランキング", "実態", "意識調査", "市場調査",
     "レビュー", "開封", "買取", "価格", "高騰", "相場", "当選報告",
@@ -232,7 +238,12 @@ EXCLUDE_WORDS = (
 )
 
 DIRECT_LIVEPOCKET = os.getenv("DIRECT_LIVEPOCKET", "true").lower() in ("1", "true", "yes", "on")
-LIVEPOCKET_SEARCH_QUERIES = ("ポケカ", "ポケモンカード")
+LIVEPOCKET_SEARCH_QUERIES = (
+    "ポケカ", "ポケモンカード", "ポケモンカードゲーム",
+    "ポケカ 抽選", "ポケモンカード 抽選",
+    "ポケカ 応募", "ポケモンカード 予約",
+    "ポケモンカードゲーム 抽選", "ポケカ30周年",
+)
 
 OFFICIAL_LIST_PAGES = (
     # Pokémon公式
