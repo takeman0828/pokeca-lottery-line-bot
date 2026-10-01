@@ -11,6 +11,14 @@ jobs:
   check:
     runs-on: ubuntu-latest
     steps:
+      - name: Verify database
+        env:
+          BOT_URL: https://pokeca-lottery-line-bot.onrender.com/db-status
+          CHECK_TOKEN: ${{ secrets.CHECK_TOKEN }}
+        run: |
+          curl --fail --show-error --connect-timeout 10 --max-time 30 \
+            -H "Authorization: Bearer ${CHECK_TOKEN}" \
+            "${BOT_URL}"
       - name: Check bot
         env:
           BOT_URL: https://pokeca-lottery-line-bot.onrender.com/check
