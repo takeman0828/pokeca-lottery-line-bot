@@ -80,6 +80,25 @@ def verify_signature(body: bytes, signature: str) -> bool:
 def health():
     return {"ok": True}
 
+@app.get("/db-status")
+def db_status():
+    expected = os.getenv("CHECK_TOKEN", "")
+    provided = request.headers.get("Authorization", "")
+    if not expected or provided != f"Bearer {expected}":
+        abort(401)
+    con = db()
+    try:
+        users = con.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+        items = con.execute("SELECT COUNT(*) FROM items").fetchone()[0]
+        return {
+            "ok": True,
+            "backend": "postgresql" if DATABASE_URL else "sqlite",
+            "registered_users": users,
+            "saved_items": items,
+        }
+    finally:
+        con.close()
+
 @app.get("/check")
 def check():
     expected = os.getenv("CHECK_TOKEN", "")
