@@ -295,6 +295,8 @@ def fetch_livepocket_items():
             soup = BeautifulSoup(r.text, "html.parser")
             matches_before = len(seen)
             event_links = soup.select('a[href*="/e/"]')
+            card_hits = action_hits = excluded_hits = 0
+            examples = []
             for a in event_links:
                 href = a.get("href", "").strip()
                 if not href.startswith("/e/"):
@@ -304,11 +306,22 @@ def fetch_livepocket_items():
                 text = (card.get_text(" ", strip=True) if card else a.get_text(" ", strip=True)).strip()
                 title = a.get_text(" ", strip=True) or text[:200]
                 hay = (title + " " + text).lower()
-                if not any(w.lower() in hay for w in CARD_WORDS):
+                has_card = any(w.lower() in hay for w in CARD_WORDS)
+                has_action = any(w.lower() in hay for w in ACTION_WORDS)
+                is_excluded = any(w.lower() in hay for w in EXCLUDE_WORDS)
+                if has_card:
+                    card_hits += 1
+                    if len(examples) < 8:
+                        examples.append({"title": title[:100], "text": text[:180]})
+                if has_action:
+                    action_hits += 1
+                if is_excluded:
+                    excluded_hits += 1
+                if not has_card:
                     continue
-                if not any(w.lower() in hay for w in ACTION_WORDS):
+                if not has_action:
                     continue
-                if any(w.lower() in hay for w in EXCLUDE_WORDS):
+                if is_excluded:
                     continue
                 if any(w in text for w in ("受付終了", "販売終了", "募集終了")):
                     continue
@@ -316,7 +329,12 @@ def fetch_livepocket_items():
                     continue
                 key = hashlib.sha256(url.encode()).hexdigest()
                 seen[key] = (key, title, url, "")
-            query_status.append({"query": q, "status": r.status_code, "event_links": len(event_links), "new_matches": len(seen) - matches_before})
+            query_status.append({
+                "query": q, "status": r.status_code, "event_links": len(event_links),
+                "card_keyword_hits": card_hits, "action_keyword_hits": action_hits,
+                "excluded_hits": excluded_hits, "examples": examples,
+                "new_matches": len(seen) - matches_before
+            })
         except Exception as e:
             print("LivePocket direct monitor error:", q, e)
             query_status.append({"query": q, "status": "error", "error": str(e)[:160]})
