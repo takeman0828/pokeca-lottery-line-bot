@@ -282,7 +282,9 @@ OFFICIAL_LIST_PAGES = (
 
 
 def livepocket_search_url(query):
-    return "https://livepocket.jp/event/search?" + quote("keyword") + "=" + quote(query)
+    # LivePocketの現行検索は keyword ではなく word パラメータを使用。
+    # 旧実装では検索条件が無視され、無関係なイベント一覧を取得していた。
+    return "https://livepocket.jp/event/search?word=" + quote(query)
 
 
 LAST_SOURCE_STATUS = {}
