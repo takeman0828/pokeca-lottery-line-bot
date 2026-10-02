@@ -5,6 +5,8 @@ from bs4 import BeautifulSoup
 import requests
 import feedparser
 from flask import Flask, request, abort
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 DB = os.getenv("DB_PATH", "pokeca.db")
 DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
@@ -399,15 +401,37 @@ def fetch_livepocket_items():
     return list(seen.values())
 
 
+def build_http_session():
+    """Use browser-like headers and retry only transient upstream failures."""
+    session = requests.Session()
+    retry = Retry(
+        total=2,
+        connect=2,
+        read=2,
+        status=2,
+        backoff_factor=0.6,
+        status_forcelist=(429, 500, 502, 503, 504),
+        allowed_methods=frozenset(["GET"]),
+        raise_on_status=False,
+    )
+    session.mount("https://", HTTPAdapter(max_retries=retry))
+    session.mount("http://", HTTPAdapter(max_retries=retry))
+    session.headers.update({
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                      "(KHTML, like Gecko) Chrome/140.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "ja-JP,ja;q=0.9,en-US;q=0.7,en;q=0.5",
+        "Cache-Control": "no-cache",
+    })
+    return session
+
+
 def fetch_official_list_items():
     global LAST_SOURCE_STATUS
     seen = {}
     shop_status = []
     now = datetime.now(timezone.utc)
-    headers = {
-        "User-Agent": "Mozilla/5.0 (compatible; PokecaLotteryBot/1.0)",
-        "Accept-Language": "ja-JP,ja;q=0.9",
-    }
+    session = build_http_session()
     for shop, page_url in OFFICIAL_LIST_PAGES:
         # Amazon search results and product pages are not lottery announcements.
         # They frequently mention Pokémon cards and card-search tools, causing false positives.
@@ -415,7 +439,20 @@ def fetch_official_list_items():
             shop_status.append({"shop": shop, "status": "disabled", "matches": 0})
             continue
         try:
-            r = requests.get(page_url, headers=headers, timeout=5)
+            r = session.get(page_url, timeout=8)
+            if r.status_code == 403:
+                if shop == "GEO":
+                    alt_url = "https://osfa.geo-online.co.jp/news/"
+                    alt = session.get(alt_url, timeout=8)
+                    if alt.ok:
+                        r = alt
+                        page_url = alt_url
+                    else:
+                        raise requests.HTTPError(
+                            f"GEO blocked: primary=403 alternate={alt.status_code}"
+                        )
+                else:
+                    raise requests.HTTPError(f"{shop} returned HTTP 403")
             r.raise_for_status()
             soup = BeautifulSoup(r.text, "html.parser")
             links_seen = len(soup.select('a[href]'))
