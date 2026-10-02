@@ -290,6 +290,28 @@ def livepocket_search_url(query):
 LAST_SOURCE_STATUS = {}
 
 
+def livepocket_period_is_active(text):
+    """Keep only LivePocket listings whose application/entry period is current or future."""
+    import re
+    now = datetime.now(timezone.utc)
+    pattern = re.compile(
+        r"(20\d{2})[./年-](\d{1,2})[./月-](\d{1,2})(?:日)?"
+        r"(?:[ T](\d{1,2})(?::(\d{2}))?)?"
+    )
+    dates = []
+    for m in pattern.finditer(text):
+        try:
+            y, mo, d = map(int, m.group(1, 2, 3))
+            hh = int(m.group(4) or 23)
+            mm = int(m.group(5) or 59)
+            dates.append(datetime(y, mo, d, hh, mm, tzinfo=timezone.utc))
+        except ValueError:
+            continue
+    if not dates:
+        return False
+    return max(dates) >= now - timedelta(minutes=5)
+
+
 def fetch_livepocket_items():
     global LAST_SOURCE_STATUS
     if not DIRECT_LIVEPOCKET:
@@ -346,6 +368,22 @@ def fetch_livepocket_items():
                     continue
                 if not any(w in text for w in ("抽選", "応募", "受付", "販売前", "販売中")):
                     continue
+
+                # Search cards can contain old events. Check the actual event
+                # page and require a current/future date before notifying.
+                try:
+                    detail = requests.get(url, headers=headers, timeout=5)
+                    detail.raise_for_status()
+                    detail_soup = BeautifulSoup(detail.text, "html.parser")
+                    detail_text = detail_soup.get_text(" ", strip=True)
+                    if any(w in detail_text for w in ("受付終了", "販売終了", "募集終了")):
+                        continue
+                    if not livepocket_period_is_active(detail_text):
+                        continue
+                except Exception as detail_error:
+                    print("LivePocket detail check error:", url, detail_error)
+                    continue
+
                 key = hashlib.sha256(url.encode()).hexdigest()
                 seen[key] = (key, title, url, "")
             query_status.append({
