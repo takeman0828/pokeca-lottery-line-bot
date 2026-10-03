@@ -404,12 +404,15 @@ def fetch_livepocket_items():
 def build_http_session():
     """Use browser-like headers and retry only transient upstream failures."""
     session = requests.Session()
+    # Read/connect timeouts are not retried: one blocked or slow shop
+    # should not hold the whole lottery scan for dozens of seconds.
+    # HTTP 429/5xx responses are still retried briefly.
     retry = Retry(
         total=2,
-        connect=2,
-        read=2,
+        connect=0,
+        read=0,
         status=2,
-        backoff_factor=0.6,
+        backoff_factor=0.4,
         status_forcelist=(429, 500, 502, 503, 504),
         allowed_methods=frozenset(["GET"]),
         raise_on_status=False,
@@ -439,11 +442,11 @@ def fetch_official_list_items():
             shop_status.append({"shop": shop, "status": "disabled", "matches": 0})
             continue
         try:
-            r = session.get(page_url, timeout=8)
+            r = session.get(page_url, timeout=5)
             if r.status_code == 403:
                 if shop == "GEO":
                     alt_url = "https://osfa.geo-online.co.jp/news/"
-                    alt = session.get(alt_url, timeout=8)
+                    alt = session.get(alt_url, timeout=5)
                     if alt.ok:
                         r = alt
                         page_url = alt_url
@@ -586,6 +589,7 @@ def fetch_official_list_items():
         except Exception as e:
             print("Official shop monitor error:", shop, e)
             shop_status.append({"shop": shop, "status": "error", "error": str(e)[:160]})
+            # Keep scanning other shops even when one upstream site times out or blocks us.
     LAST_SOURCE_STATUS["Official"] = {"status": "checked", "matches": len(seen), "shops": shop_status}
     return list(seen.values())
 
