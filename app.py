@@ -429,6 +429,50 @@ def build_http_session():
     return session
 
 
+def fetch_official_search_fallback(session, shop, page_url):
+    """Find official lottery pages through a public search RSS feed when the index page is blocked."""
+    parsed = urlsplit(page_url)
+    domain = (parsed.hostname or "").lower()
+    if not domain:
+        return []
+
+    queries = [
+        f"site:{domain} ポケカ 抽選",
+        f"site:{domain} ポケモンカード 抽選",
+        f"site:{domain} 抽選販売",
+    ]
+    found = {}
+    for q in queries:
+        rss_url = "https://www.bing.com/search?format=rss&q=" + quote(q)
+        try:
+            r = session.get(rss_url, timeout=5)
+            r.raise_for_status()
+            feed = feedparser.parse(r.content)
+            for entry in feed.entries:
+                title = (entry.get("title") or "").strip()
+                url = (entry.get("link") or "").strip()
+                summary = BeautifulSoup(entry.get("summary", ""), "html.parser").get_text(" ", strip=True)
+                hay = f"{title} {summary}"
+                if not url or not title:
+                    continue
+                if domain not in (urlsplit(url).hostname or "").lower():
+                    continue
+                if not any(w.lower() in hay.lower() for w in CARD_WORDS):
+                    continue
+                if not any(w.lower() in hay.lower() for w in ACTION_WORDS):
+                    continue
+                if any(w.lower() in title.lower() for w in EXCLUDE_WORDS):
+                    continue
+                if any(w in hay for w in ("受付終了", "募集終了", "販売終了")):
+                    continue
+                clean_url = url.split("#")[0]
+                key = hashlib.sha256(clean_url.encode()).hexdigest()
+                found[key] = (key, title, clean_url, "")
+        except Exception as e:
+            print("Official search fallback error:", shop, q, e)
+    return list(found.values())
+
+
 def fetch_official_list_items():
     global LAST_SOURCE_STATUS
     seen = {}
@@ -588,7 +632,23 @@ def fetch_official_list_items():
 
         except Exception as e:
             print("Official shop monitor error:", shop, e)
-            shop_status.append({"shop": shop, "status": "error", "error": str(e)[:160]})
+
+            # Some official sites actively block server-side requests with 403.
+            # Do not try to bypass the protection. Instead, use a public search
+            # RSS feed restricted to the same official domain, then notify only
+            # URLs that point back to that official domain.
+            fallback_items = []
+            if "403" in str(e):
+                fallback_items = fetch_official_search_fallback(session, shop, page_url)
+                for row in fallback_items:
+                    seen[row[0]] = row
+
+            shop_status.append({
+                "shop": shop,
+                "status": "error",
+                "error": str(e)[:160],
+                "fallback_matches": len(fallback_items),
+            })
             # Keep scanning other shops even when one upstream site times out or blocks us.
     LAST_SOURCE_STATUS["Official"] = {"status": "checked", "matches": len(seen), "shops": shop_status}
     return list(seen.values())
